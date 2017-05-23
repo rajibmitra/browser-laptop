@@ -123,9 +123,34 @@ const tabsReducer = (state, action, immutableAction) => {
       })
       break
     case appConstants.APP_TAB_ACTIVATE_REQUESTED:
-      setImmediate(() => {
-        tabs.setActive(action.get('tabId'))
-      })
+      {
+        setImmediate(() => {
+          tabs.setActive(action.get('tabId'))
+        })
+
+        // TODO(bsclifton) - this is a work-around
+        // which solves https://github.com/brave/browser-laptop/issues/8974
+        //
+        // The underlying problem has these steps:
+        // - tab is cloned two times
+        // - focus is given to the 2nd cloned tab
+        // - ctrl + w happens; this triggers APP_TAB_CLOSE_REQUESTED
+        //   - window is closed as expected
+        // - WINDOW_CLOSE_FRAME is fired + picked up by frameReducer
+        //   - new active frame is picked
+        //   - new frame state is commited to appState
+        //   - APP_TAB_ACTIVATE_REQUESTED is fired (that's this code)
+        //     - APP_FRAME_CHANGED fires (which includes tabState with active = false)
+        //
+        // At this point, we're *expecting* APP_TAB_UPDATED
+        // because it's changed above (`tabs.setActive(action.get('tabId'))`)
+        // ..but it never happens..
+
+        const tab = tabState.getByTabId(state, action.get('tabId'))
+        if (tab) {
+          state = tabState.updateTabValue(state, tab.set('active', true))
+        }
+      }
       break
     case appConstants.APP_TAB_INDEX_CHANGED:
       setImmediate(() => {
